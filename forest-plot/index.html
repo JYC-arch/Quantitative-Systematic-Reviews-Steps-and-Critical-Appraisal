@@ -4,7 +4,7 @@
 #steps button{white-space:pre-line}
 </style></head>
 <body>
-<header><div class="brand">醫護文獻評析 <span>/ interactive reading</span></div><div class="header-tools"><button id="fullscreen">全螢幕</button><button id="guide">使用說明</button></div></header>
+<header><div class="brand">醫護文獻評析 <span>/ interactive reading</span></div><div class="header-tools"><button id="presenter">講者視窗</button><button id="fullscreen">全螢幕</button><button id="guide">使用說明</button></div></header>
 <div class="shell"><aside><p class="eyebrow">CRITICAL APPRAISAL</p><h1>統合分析<br>圖表判讀</h1><p class="intro">原圖觀察、作答與逐步解說</p><nav id="modules" aria-label="教學單元"></nav><p class="aside-note">原圖保留文獻數據與圖形。<br>框線、拉線及解說為教學註記。</p></aside>
 <main><div class="heading"><p id="jbi"></p><h2 id="title"></h2><p id="english"></p><div id="scope"></div></div><div id="scope-alert" hidden></div>
 <section class="workspace" aria-label="原圖及解說"><div class="evidence"><div class="figure-toolbar"><span>文獻原圖</span><button id="zoom">放大原圖</button></div><div id="figure" tabindex="0" role="group" aria-label="文獻原圖，第一單元可點選菱形位置"><img id="plot" alt=""><svg id="overlay" viewBox="0 0 1000 406.222" aria-hidden="true"></svg><span id="clickmark" hidden></span></div><p class="source-line" id="source-line"></p><div class="figure-controls"><button id="hint">提示</button><button id="reveal" class="primary">顯示第一項拉線解說</button><button id="showall">顯示全部解說</button><button id="reset">重新作答</button></div><p id="hint-text" class="hint" hidden></p></div><section class="annotations"><h3>拉線解說 <span id="count"></span></h3><p id="annotation-empty">先觀察原圖並回答下方問題，再逐次顯示解說。</p><ol id="steps"></ol></section></section>
@@ -33,4 +33,29 @@ $('zoom').onclick=()=>$('zoom-dialog').showModal();$('close-zoom').onclick=()=>$
 $('fullscreen').onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch{$('guide-dialog').showModal()}};
 document.addEventListener('fullscreenchange',()=>{$('fullscreen').textContent=document.fullscreenElement?'離開全螢幕':'全螢幕'});load(0);
 
+
+let presenterWindow=null;
+function presenterState(){
+ const m=MODULES[current];
+ return {type:'forest-state',current,title:m.title,revealed,total:m.steps.length,
+  step:selected>=0?m.steps[selected].title:'尚未選取解說',moduleTitles:MODULES.map(x=>x.title)};
+}
+function syncPresenter(){if(presenterWindow&&!presenterWindow.closed)presenterWindow.postMessage(presenterState(),location.origin==='null'?'*':location.origin)}
+const originalLoad=load,originalRenderSteps=renderSteps;
+load=function(i){originalLoad(i);syncPresenter()};
+renderSteps=function(){originalRenderSteps();syncPresenter()};
+$('presenter').onclick=()=>{
+ if(presenterWindow&&!presenterWindow.closed){presenterWindow.focus();syncPresenter();return}
+ presenterWindow=window.open('presenter.html','forestPresenter','popup,width=920,height=900');
+ if(!presenterWindow)alert('請允許此網站開啟彈出式視窗，再按「講者視窗」。');
+};
+window.addEventListener('message',e=>{
+ if(!presenterWindow||e.source!==presenterWindow||e.origin!==location.origin||!e.data)return;
+ if(e.data.type==='forest-ready'){syncPresenter();return}
+ if(e.data.type!=='forest-command')return;
+ const action=e.data.action;
+ if(action==='prev'&&current>0)load(current-1);
+ else if(action==='next'&&current<MODULES.length-1)load(current+1);
+ else if(action==='reveal')$('reveal').click();
+});
 </script></body></html>

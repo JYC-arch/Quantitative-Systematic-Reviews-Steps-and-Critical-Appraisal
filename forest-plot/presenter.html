@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>講者備忘錄</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f8f4f5;color:#24292f;font:18px/1.8 "Segoe UI","Microsoft JhengHei",sans-serif}
+header{background:#24292f;color:white;padding:20px 28px}h1{font-size:24px;margin:0}header p{margin:4px 0 0;font-size:14px}
+main{max-width:1050px;margin:auto;padding:24px}section{margin-bottom:24px}button,select,input{font:inherit}button,select{padding:8px 14px;border:1px solid #b5a8ad;border-radius:6px;background:white;color:#24292f}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #0969da;outline-offset:3px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}#status,#file-status,.muted{font-size:14px;color:#57606a}h2{margin:10px 0;font-size:28px}h3{font-size:19px;margin:0 0 10px}.note{background:white;border-left:4px solid #c697a7;padding:20px 24px;margin:18px 0}.note p{white-space:pre-wrap;margin:0;overflow-wrap:anywhere}.note small{display:block;color:#57606a;margin-bottom:10px}#step{padding:12px 16px;background:#f0e3e8}details{margin-top:30px;border-top:1px solid #d8dee4;padding-top:18px}summary{cursor:pointer}label{display:block;margin-bottom:8px}#browse{width:100%;margin-top:14px}#empty{padding:22px;background:white}input{max-width:100%;font-size:15px}body.large .note p{font-size:24px}@media(max-width:600px){main{padding:16px}header{padding:16px}.note{padding:16px}h2{font-size:24px}}[hidden]{display:none!important}
+</style></head><body><header><h1>講者備忘錄</h1><p>投影與螢幕分享請選教材視窗。講稿僅留在此視窗記憶體，關閉後需重新載入。</p></header>
+<main><section><label for="file">載入電腦上的講稿檔（JSON）</label><input id="file" type="file" accept=".json,application/json"><p id="file-status" role="status">尚未載入講稿。</p></section>
+<section><div class="toolbar"><button id="prev" disabled>上一單元</button><button id="next" disabled>下一單元</button><button id="reveal" disabled>顯示下一項解說</button><button id="font" aria-pressed="false">放大講稿</button></div>
+<p id="status" role="status">正在連接教材視窗…</p><h2 id="title">等待教材</h2><p id="step">請從教材的「講者視窗」按鈕開啟本頁。</p></section>
+<section id="empty">載入講稿後，這裡會自動顯示當前單元對應的 PPT 講者備忘錄。</section><section id="notes" aria-label="當前單元講稿"></section>
+<details><summary>查閱簡報其他頁的講稿</summary><label for="browse">選擇投影片</label><select id="browse" disabled><option>請先載入講稿</option></select><div id="other"></div></details>
+</main><script>
+const $=id=>document.getElementById(id);let data=null,state=null;
+function card(s){const a=document.createElement('article');a.className='note';const h=document.createElement('h3');h.textContent=`投影片 ${s.slide}`;const small=document.createElement('small');small.textContent=s.text.split('\n').filter(Boolean).slice(0,2).join(' · ');const p=document.createElement('p');p.textContent=s.notes||'本頁沒有講者備忘錄。';a.append(h,small,p);return a}
+function render(){
+ $('notes').replaceChildren();
+ if(!data||!state){$('empty').hidden=false;return}
+ const m=data.modules[state.current];
+ if(!m||m.title!==state.title){$('empty').hidden=false;$('empty').textContent='講稿與目前教材單元不相符，請確認檔案版本。';return}
+ $('empty').hidden=true;
+ for(const num of m.slides){const slide=data.slides.find(s=>s.slide===num);if(slide)$('notes').append(card(slide))}
+}
+$('file').addEventListener('change',async e=>{
+ const f=e.target.files[0];if(!f)return;
+ try{
+  if(f.size>10000000)throw Error('檔案超過 10 MB。');
+  const d=JSON.parse(await f.text());
+  if(d.format!=='forest-presenter-notes-v1'||!Array.isArray(d.modules)||!Array.isArray(d.slides)||!d.modules.every(m=>typeof m.title==='string'&&Array.isArray(m.slides)&&m.slides.every(Number.isInteger))||!d.slides.every(s=>Number.isInteger(s.slide)&&typeof s.text==='string'&&typeof s.notes==='string'))throw Error('講稿檔格式不正確。');
+  data=d;$('file-status').textContent=`已載入 ${f.name}，共 ${d.slides.length} 頁。`;
+  $('browse').replaceChildren();for(const s of d.slides){const o=document.createElement('option');o.value=s.slide;o.textContent=`${s.slide} · ${s.text.split('\n').find(Boolean)||'圖片頁'}`;$('browse').append(o)}$('browse').disabled=false;$('other').replaceChildren();render();
+ }catch(err){$('file-status').textContent=`無法載入：${err.message} 請選取提供的講者備忘錄 JSON 檔。`}
+});
+$('browse').onchange=()=>{const s=data.slides.find(s=>s.slide===+$('browse').value);$('other').replaceChildren(...(s?[card(s)]:[]))};
+$('font').onclick=()=>{const large=document.body.classList.toggle('large');$('font').setAttribute('aria-pressed',large);$('font').textContent=large?'一般字級':'放大講稿'};
+function send(action){if(window.opener&&!window.opener.closed)window.opener.postMessage({type:'forest-command',action},location.origin==='null'?'*':location.origin)}
+for(const action of ['prev','next','reveal'])$(action).onclick=()=>send(action);
+window.addEventListener('message',e=>{
+ if(e.source!==window.opener||e.origin!==location.origin||!e.data||e.data.type!=='forest-state')return;
+ state=e.data;$('title').textContent=state.title;$('status').textContent=`教材已連接 · 單元 ${state.current+1} / ${state.moduleTitles.length}`;$('step').textContent=`目前解說：${state.step}（已顯示 ${state.revealed} / ${state.total}）`;
+ $('prev').disabled=state.current===0;$('next').disabled=state.current===state.moduleTitles.length-1;$('reveal').disabled=state.revealed===state.total;render();
+});
+if(window.opener)window.opener.postMessage({type:'forest-ready'},location.origin==='null'?'*':location.origin);
+</script></body></html>
